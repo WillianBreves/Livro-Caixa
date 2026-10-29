@@ -368,7 +368,7 @@ tr.ex td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
 .dueitem .t span { font-size: .8rem; color: var(--muted); }
 
 /* weeks */
-.weeks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12.5rem), 1fr)); gap: 10px; }
+.weeks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 10px; }
 .week { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .week.cur { border-color: var(--accent); }
 .week h3 { margin: 0; font-size: .98rem; display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
@@ -417,6 +417,12 @@ table.gastos td input.dia { width: 4rem; }
 .chartnote { font-size: .82rem; color: var(--muted); margin: 8px 0 0; }
 .week.total { border: 2px solid var(--accent); background: var(--accent-soft); }
 .week.total { grid-column: 1 / -1; }
+.wini { background: var(--accent-soft); border-radius: var(--r); padding: 8px 10px; }
+.week .kv { font-size: .86rem; gap: 3px 8px; }
+.week .kv .k { white-space: nowrap; }
+.ebtn { align-self: flex-start; font-size: .82rem; font-weight: 600; text-decoration: none; }
+.entbox { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--accent); border-radius: var(--r); padding: 10px; }
+.entbox input { width: 100%; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .mstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: 10px; }
 .mstats div { display: flex; flex-direction: column; gap: 2px; }
 .mstats span { font-size: .8rem; color: var(--muted); }
@@ -558,7 +564,7 @@ td.ck, th.ck { width: 2rem; }
 
   <!-- SEMANA A SEMANA -->
   <section class="panel" id="p-sem" hidden>
-    <p class="note muted small" style="margin:0">Semana 1 = dias 1 a 7, semana 2 = 8 a 14, semana 3 = 15 a 21, semana 4 = 22 a 28 e semana 5 = o que sobra do mês.</p>
+    <p class="note muted small" style="margin:0">Cada semana começa com o que sobrou da semana anterior mais a entrada da semana. Semana 1 = dias 1 a 7, semana 2 = 8 a 14, semana 3 = 15 a 21, semana 4 = 22 a 28 e semana 5 = o que sobra do mês.</p>
     <div class="weeks" id="weeks"></div>
     <div class="card">
       <h2>Cada gasto, semana a semana</h2>
@@ -733,7 +739,7 @@ td.ck, th.ck { width: 2rem; }
   const money = v => brl.format(Math.round(v * 100) / 100 + 0);
   const signed = v => (v > 0 ? "+" : v < 0 ? "−" : "") + brl.format(Math.abs(v));
   const cents = v => Math.round(Number(v) * 100);
-  const parseMoney = s => { s = String(s || "").replace(/[R$\s]/g, ""); if (!s) return NaN; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = Number(s); return isFinite(n) ? Math.round(n * 100) / 100 : NaN; };
+  const parseMoney = s => { s = String(s || "").replace(/[R$\s\u00a0]/g, ""); if (!s) return NaN; if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ""); const n = Number(s); return isFinite(n) ? Math.round(n * 100) / 100 : NaN; };
   const fmtMoneyInput = v => (v === "" || v == null || isNaN(v)) ? "" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const pad = n => String(n).padStart(2, "0");
   const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
@@ -745,12 +751,13 @@ td.ck, th.ck { width: 2rem; }
   const shiftMonth = (mk, n) => { const d = new Date(+mk.slice(0, 4), +mk.slice(5, 7) - 1 + n, 1); return monthKey(d); };
   const mName = mk => new Date(+mk.slice(0, 4), +mk.slice(5, 7) - 1, 1).toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
   const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-  const CRED_BASE = ["Venda", "Aporte do dono"];
+  const CRED_BASE = ["Entrada da semana", "Venda", "Aporte do dono"];
+  const isEntrada = l => l.tipo === "credito" && (l.entrada_semana || l.categoria === "Entrada da semana");
   const credCats = (ls) => { const custom = Object.values(S.cats || {}).filter(c => c.tipo === "credito").map(c => c.nome).sort((a, b) => a.localeCompare(b)); const used = ls ? ls.filter(l => l.tipo === "credito").map(l => l.categoria || "Venda") : []; return [...new Set(CRED_BASE.concat(custom, used, ["Outro crédito"]))]; };
   const LOJAS = ["Axis + UpDrive", "Axis", "UpDrive"];
 
   // ---------- state ----------
-  const S = { db: null, canWrite: true, uid: null, gastos: {}, lanc: {}, meses: {}, loaded: { g: false, l: false, m: false }, month: monthKey(new Date()), tab: "lanc", tipo: "debito", editing: null, confirmDel: null, err: "", siMode: null, siDraft: null, siShowHist: false, user: null, names: {}, dl: null, cats: {}, pendingSel: null, hist: [], histLive: [], histOlder: [], histMore: false, olderMore: false, histLimit: 1000, logShow: 300, sel: new Set(), selConfirm: false, myName: "" };
+  const S = { db: null, canWrite: true, uid: null, gastos: {}, lanc: {}, meses: {}, loaded: { g: false, l: false, m: false }, month: monthKey(new Date()), tab: "lanc", tipo: "debito", editing: null, confirmDel: null, err: "", siMode: null, siDraft: null, siShowHist: false, user: null, names: {}, dl: null, cats: {}, pendingSel: null, entEdit: null, hist: [], histLive: [], histOlder: [], histMore: false, olderMore: false, histLimit: 1000, logShow: 300, sel: new Set(), selConfirm: false, myName: "" };
   try { S.myName = localStorage.getItem("lc-nome") || ""; } catch (e) {}
   try { const t = localStorage.getItem("lc-tab"); if (t) S.tab = t; } catch (e) {}
 
@@ -1004,35 +1011,52 @@ td.ck, th.ck { width: 2rem; }
     for (let w = 1; w <= nW; w++) {
       const de = (w - 1) * 7 + 1, ate = Math.min(w * 7, ld);
       const rs = ls.filter(l => weekOf(l.data) === w);
-      const c = rs.filter(l => l.tipo === "credito").reduce((t, l) => t + cents(l.valor), 0);
+      const ents = rs.filter(isEntrada);
+      const e = ents.reduce((t, l) => t + cents(l.valor), 0);
+      const c = rs.filter(l => l.tipo === "credito" && !isEntrada(l)).reduce((t, l) => t + cents(l.valor), 0);
       const d = rs.filter(l => l.tipo === "debito").reduce((t, l) => t + cents(l.valor), 0);
-      saldo += c - d;
+      const veio = saldo, inicio = saldo + e;
+      saldo = inicio + c - d;
       let pend = 0, late = 0;
       Object.values(plan).forEach(p => p.items.forEach(it => { if (!it.lanc && it.date && weekOf(it.date) === w) { if (it.date < todayStr) late += cents(p.g.valor); else pend += cents(p.g.valor); } }));
-      wk.push({ w, de, ate, c, d, saldo, pend, late });
+      wk.push({ w, de, ate, e, ents, c, d, veio, inicio, saldo, pend, late });
     }
-    const maxv = Math.max(1, ...wk.map(x => Math.max(x.c, x.d + x.pend + x.late)));
+    const maxv = Math.max(1, ...wk.map(x => Math.max(x.c + x.e, x.d + x.pend + x.late)));
     wk.forEach(x => {
       const deS = mk + "-" + pad(x.de), ateS = mk + "-" + pad(x.ate);
       const cur = todayStr >= deS && todayStr <= ateS;
       const future = todayStr < deS;
       const card = el("div", { class: "week" + (cur ? " cur" : "") });
+      card.dataset.semana = String(x.w);
       card.append(el("h3", {}, "Semana " + x.w, el("small", { text: `${pad(x.de)} a ${pad(x.ate)}/${mk.slice(5)}${cur ? " · atual" : ""}` })));
+      const ini = el("div", { class: "kv wini" });
+      const has = si != null;
+      ini.append(el("span", { class: "k", text: x.w === 1 ? "Início do mês" : "Da semana " + (x.w - 1) }), el("span", { class: "v num", text: has ? money(x.veio / 100) : "—" }));
+      const eLbl = el("span", { class: "k" }, "+ Entrada");
+      ini.append(eLbl, el("span", { class: "v num pos", text: money(x.e / 100) }));
+      ini.append(el("span", { class: "k res", text: "= Saldo inicial" }), el("span", { class: "v num res", text: has ? money(x.inicio / 100) : "—" }));
+      card.append(ini);
+      if (S.canWrite) {
+        const eb = el("button", { type: "button", class: "linkbtn ebtn", text: x.e ? "Alterar entrada" : "+ Lançar entrada da semana" });
+        eb.addEventListener("click", () => { S.entEdit = S.entEdit === x.w ? null : x.w; render(); });
+        card.append(eb);
+        if (S.entEdit === x.w) card.append(entradaEditor(x, deS));
+      }
       const kv = el("div", { class: "kv" });
       const res = x.c - x.d;
       kv.append(el("span", { class: "k", text: "Créditos" }), el("span", { class: "v num pos", text: money(x.c / 100) }));
       kv.append(el("span", { class: "k", text: "Débitos" }), el("span", { class: "v num neg", text: money(x.d / 100) }));
-      kv.append(el("span", { class: "k res", text: res >= 0 ? "Sobrou (superávit)" : "Faltou (déficit)" }), el("span", { class: "v num res " + (res > 0 ? "pos" : res < 0 ? "neg" : ""), text: signed(res / 100) }));
-      kv.append(el("span", { class: "k", text: "Saldo no fim" }), el("span", { class: "v num", text: si == null ? "—" : money(x.saldo / 100) }));
+      kv.append(el("span", { class: "k res", text: "Saldo final" }), el("span", { class: "v num res " + (x.saldo < 0 ? "neg" : ""), text: has ? money(x.saldo / 100) : "—" }));
+      kv.append(el("span", { class: "k", text: "Resultado" }), el("span", { class: "v num " + ((x.saldo - x.inicio) > 0 ? "pos" : (x.saldo - x.inicio) < 0 ? "neg" : ""), text: signed((x.saldo - x.inicio) / 100) }));
       card.append(kv);
-      const bar = el("div", { class: "bar", title: "" });
-      card.append(el("div", { class: "small muted", text: "Créditos" }), mkBar([[x.c, "var(--credit)"]], maxv), el("div", { class: "small muted", text: "Débitos" }), mkBar([[x.d, "var(--debit)"], [x.late, "var(--warn)"], [x.pend, "var(--line)"]], maxv));
+      card.append(el("div", { class: "small muted", text: "Entrou" }), mkBar([[x.e, "var(--accent)"], [x.c, "var(--credit)"]], maxv), el("div", { class: "small muted", text: "Saiu" }), mkBar([[x.d, "var(--debit)"], [x.late, "var(--warn)"], [x.pend, "var(--line)"]], maxv));
       if (x.late) card.append(el("span", { class: "chip bad", text: "Fixos atrasados: " + money(x.late / 100) }));
       if (x.pend) card.append(el("span", { class: "chip mut", text: (future ? "Previsto sair: " : "Ainda vai sair: ") + money(x.pend / 100) }));
+      if (has && x.pend && x.saldo - x.pend < 0) card.append(el("span", { class: "chip bad", text: "Falta " + money((x.pend - x.saldo) / 100) + " para os fixos previstos" }));
       box.append(card);
     });
     {
-      const tc = wk.reduce((t, x) => t + x.c, 0), td = wk.reduce((t, x) => t + x.d, 0), tp = wk.reduce((t, x) => t + x.pend + x.late, 0);
+      const te = wk.reduce((t, x) => t + x.e, 0), tc = wk.reduce((t, x) => t + x.c + x.e, 0), td = wk.reduce((t, x) => t + x.d, 0), tp = wk.reduce((t, x) => t + x.pend + x.late, 0);
       let undated = 0; Object.values(plan).forEach(p => p.items.forEach(it => { if (!it.lanc && !it.date) undated += cents(p.g.valor); }));
       const res = tc - td;
       const card = el("div", { class: "week total" });
@@ -1040,7 +1064,8 @@ td.ck, th.ck { width: 2rem; }
       const kv = el("div", { class: "mstats kv" });
       const st = (k, v, c) => kv.append(el("div", {}, el("span", { class: "k", text: k }), el("b", { class: "v " + (c || ""), text: v })));
       st("Saldo inicial", si == null ? "—" : money(si / 100));
-      st("Créditos", money(tc / 100), "pos");
+      st("Entradas das semanas", money(te / 100), "pos");
+      st("Outros créditos", money((tc - te) / 100), "pos");
       st("Débitos", money(td / 100), "neg");
       st(res >= 0 ? "Sobrou no mês (superávit)" : "Faltou no mês (déficit)", signed(res / 100), res > 0 ? "pos" : res < 0 ? "neg" : "");
       st("Saldo final", si == null ? "—" : money((si + res) / 100));
@@ -1049,6 +1074,39 @@ td.ck, th.ck { width: 2rem; }
       box.append(card);
     }
     renderMatrix(ls, plan, nW);
+  }
+  function entradaEditor(x, deS) {
+    const box = el("div", { class: "entbox" });
+    const main = x.ents.find(l => l.entrada_semana) || x.ents[0] || null;
+    const outros = x.ents.filter(l => l !== main).reduce((t, l) => t + cents(l.valor), 0);
+    const v = el("input", { inputmode: "decimal", class: "num", placeholder: "0,00", "aria-label": "Valor da entrada da semana " + x.w, value: main ? fmtMoneyInput(main.valor) : "" });
+    const d = el("input", { type: "date", "aria-label": "Data da entrada", value: main ? main.data : deS, min: deS, max: S.month + "-" + pad(x.ate) });
+    const o = el("input", { placeholder: "Observação (opcional)", "aria-label": "Observação da entrada", value: main && main.obs ? main.obs : "" });
+    const msg = el("div", { class: "formmsg" });
+    const save = el("button", { type: "button", class: "btn small", text: "Salvar" });
+    save.addEventListener("click", async () => {
+      const n = parseMoney(v.value);
+      if (!(n > 0)) { msg.textContent = "Digite o valor que entrou, por exemplo 7.000."; msg.className = "formmsg err"; v.focus(); return; }
+      if (!d.value || weekOf(d.value) !== x.w || !d.value.startsWith(S.month)) { msg.textContent = "A data precisa estar dentro da semana " + x.w + "."; msg.className = "formmsg err"; return; }
+      save.disabled = true;
+      const body = { data: d.value, tipo: "credito", categoria: "Entrada da semana", descricao: "Entrada da semana " + x.w, loja: "Axis + UpDrive", valor: n, obs: o.value.trim() || null, entrada_semana: true, gasto_id: null };
+      try {
+        if (main) {
+          await S.db.collection("lancamentos").doc(main.id).update(body);
+          const ch = diffLanc(main, body);
+          if (ch.length) logEvent({ ref: refOf([body]), tipo: "lancamento", acao: "editou", resumo: `Alterou a entrada da semana ${x.w} de ${mName(S.month)}`, detalhes: ch });
+        } else {
+          await addLanc(body);
+        }
+        S.entEdit = null; render();
+      } catch (e) { save.disabled = false; msg.textContent = "Não foi possível salvar."; msg.className = "formmsg err"; }
+    });
+    const acts = el("div", { class: "nacts" }, save, el("button", { type: "button", class: "btn small ghost", text: "Cancelar", onclick: () => { S.entEdit = null; render(); } }));
+    if (main) acts.append(el("button", { type: "button", class: "btn small ghost", style: "color:var(--debit);border-color:var(--debit)", text: "Remover entrada", onclick: async () => { S.entEdit = null; await deleteLancs([main.id], `Removeu a entrada da semana ${x.w} de ${mName(S.month)}`); } }));
+    box.append(el("div", { class: "small", text: "Quanto entrou no caixa para a semana " + x.w + "?" }), v, d, o, acts, msg);
+    if (outros) box.append(el("div", { class: "small muted", text: `Além desta, há ${money(outros / 100)} em outros lançamentos marcados como "Entrada da semana".` }));
+    setTimeout(() => v.focus(), 0);
+    return box;
   }
   function mkBar(parts, max) { const b = el("div", { class: "bar" }); parts.forEach(([v, c]) => { if (v > 0) { const i = el("i"); i.style.width = (v / max * 100) + "%"; i.style.background = c; b.append(i); } }); return b; }
 
@@ -1806,23 +1864,24 @@ td.ck, th.ck { width: 2rem; }
     const M = v => ({ v: v / 100, s: "money" }), BM = v => ({ v: v / 100, s: "boldmoney" }), B = v => ({ v, s: "bold" });
     // semanas
     let saldo = si ?? 0; const weeks = [];
-    for (let k = 1; k <= nW; k++) { const rs = ls.filter(l => weekOf(l.data) === k); const c = rs.filter(l => l.tipo === "credito").reduce((t, l) => t + cents(l.valor), 0), d = rs.filter(l => l.tipo === "debito").reduce((t, l) => t + cents(l.valor), 0); saldo += c - d; const [de, ate] = wkRange(mk, k); weeks.push({ k, de, ate, c, d, saldo }); }
+    for (let k = 1; k <= nW; k++) { const rs = ls.filter(l => weekOf(l.data) === k); const e = rs.filter(isEntrada).reduce((t, l) => t + cents(l.valor), 0); const c = rs.filter(l => l.tipo === "credito").reduce((t, l) => t + cents(l.valor), 0), d = rs.filter(l => l.tipo === "debito").reduce((t, l) => t + cents(l.valor), 0); const veio = saldo; saldo += c - d; const [de, ate] = wkRange(mk, k); weeks.push({ k, de, ate, e, c, d, veio, saldo }); }
     const tc = weeks.reduce((t, x) => t + x.c, 0), td = weeks.reduce((t, x) => t + x.d, 0);
     const per2 = d => pad(d) + "/" + mk.slice(5);
     const resumo = [[B("Livro-caixa Axis + UpDrive")], ["Mês", mlabel], ...(w ? [["Período", `Semana ${w} (${per2(weeks[w - 1].de)} a ${per2(weeks[w - 1].ate)})`]] : []), ["Gerado em", gerado], []];
     if (w) {
-      const x = weeks[w - 1], ini = x.saldo - (x.c - x.d);
-      resumo.push(["Saldo no início da semana", si == null ? "—" : M(ini)], ["Créditos", M(x.c)], ["Débitos", M(x.d)], [B("Resultado da semana"), BM(x.c - x.d)], [B("Saldo no fim da semana"), si == null ? "—" : BM(x.saldo)]);
+      const x = weeks[w - 1];
+      resumo.push([x.k === 1 ? "Saldo inicial do mês" : "Veio da semana anterior", si == null ? "—" : M(x.veio)], ["+ Entrada da semana", M(x.e)], [B("= Saldo inicial da semana"), si == null ? "—" : BM(x.veio + x.e)], ["Outros créditos", M(x.c - x.e)], ["Débitos", M(x.d)], [B("Saldo no fim da semana"), si == null ? "—" : BM(x.saldo)]);
     } else {
       resumo.push(["Saldo inicial", si == null ? "Não definido" : M(si)], ["Créditos", M(tc)], ["Débitos", M(td)], [B("Resultado do mês"), BM(tc - td)], [B("Saldo final"), si == null ? "—" : BM((si ?? 0) + tc - td)], []);
-      resumo.push(H(["Semana", "Período", "Créditos", "Débitos", "Resultado", "Saldo no fim"]));
-      weeks.forEach(x => resumo.push(["Semana " + x.k, `${per2(x.de)} a ${per2(x.ate)}`, M(x.c), M(x.d), M(x.c - x.d), si == null ? "" : M(x.saldo)]));
-      resumo.push([B("Total do mês"), B(`${per2(1)} a ${per2(lastDay(mk))}`), BM(tc), BM(td), BM(tc - td), si == null ? "" : BM((si ?? 0) + tc - td)]);
+      resumo.push(H(["Semana", "Período", "Veio da semana anterior", "Entrada da semana", "Saldo inicial da semana", "Outros créditos", "Débitos", "Saldo no fim"]));
+      weeks.forEach(x => resumo.push(["Semana " + x.k, `${per2(x.de)} a ${per2(x.ate)}`, si == null ? "" : M(x.veio), M(x.e), si == null ? "" : M(x.veio + x.e), M(x.c - x.e), M(x.d), si == null ? "" : M(x.saldo)]));
+      const te = weeks.reduce((t, x) => t + x.e, 0);
+      resumo.push([B("Total do mês"), B(`${per2(1)} a ${per2(lastDay(mk))}`), si == null ? "" : BM(si), BM(te), "", BM(tc - te), BM(td), si == null ? "" : BM((si ?? 0) + tc - td)]);
     }
     // lançamentos
     const lr = [H(["Data", "Tipo", "Descrição", "Gasto / categoria", "Loja", "Valor", "Saldo após", "Observação"])];
     lancRowsFor(ls, si, w).forEach(({ l, saldo }) => lr.push([{ v: l.data, s: "date" }, l.tipo === "credito" ? "Crédito" : "Débito", l.descricao || "", gastoLabel(l), l.loja || "", M(cents(l.valor)), si == null ? "" : M(saldo), l.obs || ""]));
-    const sheets = [{ name: "Resumo", rows: resumo, cols: [30, 22, 16, 16, 16, 16] }, { name: "Lançamentos", rows: lr, cols: [12, 10, 34, 30, 16, 15, 15, 40], freeze: 1 }];
+    const sheets = [{ name: "Resumo", rows: resumo, cols: [30, 22, 22, 18, 22, 16, 16, 16] }, { name: "Lançamentos", rows: lr, cols: [12, 10, 34, 30, 16, 15, 15, 40], freeze: 1 }];
     if (!w) {
       // semana a semana
       const mh = ["Grupo", "Item"]; for (let k = 1; k <= nW; k++) { const [de, ate] = wkRange(mk, k); mh.push(`Sem. ${k} (${pad(de)}–${pad(ate)})`); } mh.push("Mês", "Ainda a lançar");
