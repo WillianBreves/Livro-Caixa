@@ -844,14 +844,25 @@ td.ck, th.ck { width: 2rem; }
   const gastosList = () => gastosAll().filter(g => !g.removido);
   const lancOfMonth = mk => Object.values(S.lanc).filter(l => l.data && l.data.startsWith(mk)).sort((a, b) => a.data.localeCompare(b.data) || (a.criado_em || "").localeCompare(b.criado_em || "") || a.id.localeCompare(b.id));
   const signedVal = l => (l.tipo === "credito" ? 1 : -1) * cents(l.valor);
-  function saldoInicial(mk, depth = 0) {
-    if (S.meses[mk] && S.meses[mk].saldo_inicial != null) return cents(S.meses[mk].saldo_inicial);
+  // Saldo inicial do mês: o definido no mês; senão, o último definido antes + tudo que entrou e saiu desde então;
+  // se nunca foi definido nenhum, o caixa conta a partir de R$ 0,00 (o resultado dos meses sempre vale).
+  function siBase(mk) {
     const earlier = Object.keys(S.meses).filter(k => k < mk && S.meses[k].saldo_inicial != null).sort();
-    if (!earlier.length || depth > 60) return null;
-    const prev = shiftMonth(mk, -1);
-    const si = saldoInicial(prev, depth + 1);
-    if (si == null) return null;
-    return si + lancOfMonth(prev).reduce((t, l) => t + signedVal(l), 0);
+    return earlier.length ? earlier[earlier.length - 1] : null;
+  }
+  function saldoInicial(mk) {
+    if (S.meses[mk] && S.meses[mk].saldo_inicial != null) return cents(S.meses[mk].saldo_inicial);
+    const b = siBase(mk);
+    let t = b ? cents(S.meses[b].saldo_inicial) : 0;
+    const from = b || "";
+    for (const l of Object.values(S.lanc)) { if (!l.data) continue; const m = l.data.slice(0, 7); if (m >= from && m < mk) t += signedVal(l); }
+    return t;
+  }
+  // de onde vem o saldo inicial do mês: "definido", "anterior" (vem do mês anterior) ou "zero" (nada definido, conta de zero)
+  function siOrigem(mk) {
+    if (siDefined(mk)) return "definido";
+    if (siBase(mk) || Object.values(S.lanc).some(l => l.data && l.data.slice(0, 7) < mk)) return "anterior";
+    return "zero";
   }
   function occurrences(g, mk) {
     // returns [{date|null}] for a fixed cost in a month
@@ -897,15 +908,15 @@ td.ck, th.ck { width: 2rem; }
     const dbt = ls.filter(l => l.tipo === "debito").reduce((t, l) => t + cents(l.valor), 0);
     const res = cr - dbt;
     const fim = (si ?? 0) + res;
-    $("#si").textContent = si == null ? "Não definido" : money(si / 100);
+    $("#si").textContent = ready ? money(si / 100) : "—";
     $("#cr").textContent = money(cr / 100);
     $("#db").textContent = money(dbt / 100);
     const r = $("#res"); r.textContent = signed(res / 100); r.className = "val num " + (res > 0 ? "pos" : res < 0 ? "neg" : "");
     const isCur = mk === monthKey(new Date());
     $("#nowlbl").textContent = isCur ? "Saldo no caixa agora" : "Saldo no fim de " + mName(mk).split(" ")[0];
-    $("#nowval").textContent = si == null ? "—" : money(fim / 100);
+    $("#nowval").textContent = ready ? money(fim / 100) : "—";
     $("#nowval").className = "val num " + (fim < 0 ? "neg" : "");
-    $("#nowsub").textContent = !ready ? "Carregando…" : si == null ? "Defina o saldo inicial do mês para começar." : `Saldo inicial ${money(si / 100)} ${res >= 0 ? "+" : "−"} ${money(Math.abs(res) / 100)} do mês`;
+    $("#nowsub").textContent = !ready ? "Carregando…" : siOrigem(mk) === "zero" && !Object.keys(S.meses).some(k => S.meses[k].saldo_inicial != null) ? `Saldo inicial não definido: contando de R$ 0,00 ${res >= 0 ? "+" : "−"} ${money(Math.abs(res) / 100)} do mês` : `Saldo inicial ${money(si / 100)} ${res >= 0 ? "+" : "−"} ${money(Math.abs(res) / 100)} do mês`;
     $("#editsi").hidden = !S.canWrite;
     $("#editsi").textContent = siDefined(mk) ? "Corrigir" : "Definir";
     renderSIState();
@@ -1620,7 +1631,8 @@ td.ck, th.ck { width: 2rem; }
   function renderSIState() {
     const box = $("#sistate"); box.textContent = "";
     const mk = S.month, c = corrections(mk);
-    if (!siDefined(mk)) { if (saldoInicial(mk) != null) box.append(el("span", { class: "muted", text: "Vem do saldo final do mês anterior" })); return; }
+    if (!(S.loaded.l && S.loaded.m)) return;
+    if (!siDefined(mk)) { const o = siOrigem(mk); box.append(el("span", { class: o === "zero" ? "chip warn" : "muted", text: o === "zero" ? "Não definido · conta de zero" : "Vem do saldo final do mês anterior" })); return; }
     if (!c.length) { box.append(el("span", { class: "chip ok", text: "Travado" })); return; }
     box.append(el("button", { type: "button", class: "chip warn", style: "border:0;cursor:pointer", text: `Corrigido ${c.length}× · ver histórico`, onclick: goHist }));
   }
